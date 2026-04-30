@@ -26,23 +26,51 @@ export default function SpinWheel({ tasks }: { tasks: Task[] }) {
   const [spinning, setSpinning] = useState(false)
   const [winner, setWinner] = useState<Task | null>(null)
   const wheelRef = useRef<HTMLDivElement>(null)
-  const spinIdRef = useRef(0)
-  const spinStartedAtRef = useRef(0)
 
-  // Watchdog: while spinning, poll wall-clock time. If we're past the spin
-  // duration (e.g., browser paused our completion timer because the window
-  // was hidden/occluded), force-reset so the button is never stuck.
-  // Doesn't rely on visibilitychange/focus events, which behave inconsistently
-  // across browsers when a window is covered by another window vs. minimized.
+  // Refs that survive the spin so completion can fire from anywhere
+  // (timer, focus, click, etc.) without recomputing.
+  const controlsRef = useRef<ReturnType<typeof animate> | null>(null)
+  const spinEndAtRef = useRef(0)
+  const targetRotationRef = useRef(0)
+  const pendingWinnerRef = useRef<Task | null>(null)
+
+  function finishSpin() {
+    if (!spinning) return
+    if (Date.now() < spinEndAtRef.current) return
+
+    controlsRef.current?.stop()
+    rotation.set(targetRotationRef.current) // snap to exact target
+
+    setWinner(pendingWinnerRef.current)
+    setSpinning(false)
+    celebrate()
+  }
+
+  // While spinning, attach every "wake up" signal we have. Any of them will
+  // complete the spin once the wall-clock end time is reached. This is robust
+  // against browser timer throttling when the window is occluded/hidden.
   useEffect(() => {
     if (!spinning) return
-    const watchdog = setInterval(() => {
-      if (Date.now() - spinStartedAtRef.current >= SPIN_DURATION_MS + 200) {
-        spinIdRef.current++ // invalidate any pending completion
-        setSpinning(false)
-      }
-    }, 200)
-    return () => clearInterval(watchdog)
+
+    const timeout = window.setTimeout(finishSpin, SPIN_DURATION_MS + 100)
+    const interval = window.setInterval(finishSpin, 500)
+
+    window.addEventListener('focus', finishSpin)
+    window.addEventListener('pageshow', finishSpin)
+    document.addEventListener('visibilitychange', finishSpin)
+    document.addEventListener('pointermove', finishSpin, true)
+    document.addEventListener('click', finishSpin, true)
+
+    return () => {
+      clearTimeout(timeout)
+      clearInterval(interval)
+      window.removeEventListener('focus', finishSpin)
+      window.removeEventListener('pageshow', finishSpin)
+      document.removeEventListener('visibilitychange', finishSpin)
+      document.removeEventListener('pointermove', finishSpin, true)
+      document.removeEventListener('click', finishSpin, true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spinning])
 
   function celebrate() {
@@ -105,11 +133,16 @@ export default function SpinWheel({ tasks }: { tasks: Task[] }) {
     })
   }, [tasks])
 
-  async function spin() {
-    if (slices.length === 0 || spinning) return
+  function spin() {
+    if (slices.length === 0) return
 
-    const myId = ++spinIdRef.current
-    spinStartedAtRef.current = Date.now()
+    // Self-heal: if state thinks we're still spinning, finish the previous
+    // one rather than bailing — prevents the button getting stuck.
+    if (spinning) {
+      finishSpin()
+      return
+    }
+
     setSpinning(true)
     setWinner(null)
 
@@ -117,28 +150,23 @@ export default function SpinWheel({ tasks }: { tasks: Task[] }) {
     const offset = Math.random() * 360
     const target = rotation.get() + turns * 360 + offset
 
-    // Fire-and-forget the visual animation; framer-motion v12's promise on
-    // motion-value animations doesn't resolve reliably, so we use a timer.
-    animate(rotation, target, {
-      duration: SPIN_DURATION_MS / 1000,
-      ease: [0.17, 0.67, 0.12, 0.99],
-    })
-
-    await new Promise<void>((resolve) => setTimeout(resolve, SPIN_DURATION_MS + 50))
-
-    // If the user alt-tabbed and returned (visibility handler bumped the id),
-    // or started another spin, this completion is stale — bail.
-    if (myId !== spinIdRef.current) return
-
+    // Compute the winner upfront — it's deterministic from the target.
+    // The visual spin is just theatrics; we already know who won.
     const finalRotation = ((target % 360) + 360) % 360
     const pointerAngle = (360 - finalRotation) % 360
     const hit = slices.find(
       (s) => pointerAngle >= s.start && pointerAngle < s.end,
     ) ?? slices[slices.length - 1]
 
-    setWinner(hit.task)
-    setSpinning(false)
-    celebrate()
+    targetRotationRef.current = target
+    spinEndAtRef.current = Date.now() + SPIN_DURATION_MS
+    pendingWinnerRef.current = hit.task
+
+    controlsRef.current?.stop()
+    controlsRef.current = animate(rotation, target, {
+      duration: SPIN_DURATION_MS / 1000,
+      ease: [0.17, 0.67, 0.12, 0.99],
+    })
   }
 
   return (
