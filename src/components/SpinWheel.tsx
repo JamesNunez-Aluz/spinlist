@@ -221,7 +221,7 @@ export default function SpinWheel({ tasks }: { tasks: Task[] }) {
       <button
         onClick={spin}
         disabled={slices.length === 0 || spinning}
-        className="px-8 py-3 rounded-full font-display font-semibold text-lg text-white
+        className="relative z-10 px-8 py-3 rounded-full font-display font-semibold text-lg text-white
                    bg-gradient-to-r from-pink-500 via-fuchsia-500 to-violet-500
                    hover:opacity-95 active:scale-95 transition
                    disabled:opacity-40 disabled:cursor-not-allowed
