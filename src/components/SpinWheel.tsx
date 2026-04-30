@@ -85,7 +85,7 @@ export default function SpinWheel({ tasks }: { tasks: Task[] }) {
     })
   }, [tasks])
 
-  function spin() {
+  async function spin() {
     if (slices.length === 0 || spinning) return
     setSpinning(true)
     setWinner(null)
@@ -94,24 +94,26 @@ export default function SpinWheel({ tasks }: { tasks: Task[] }) {
     const offset = Math.random() * 360
     const target = rotation.get() + turns * 360 + offset
 
-    animate(rotation, target, {
-      duration: 4.5,
-      ease: [0.17, 0.67, 0.12, 0.99],
-      onComplete: () => {
-        const finalRotation = ((target % 360) + 360) % 360
-        // Pointer is at top (angle 270 in SVG coords where 0 = right going clockwise).
-        // Slices are drawn starting at SVG angle -90 (top). Wheel rotates clockwise by `finalRotation`.
-        // Slice currently under the top pointer = the one whose [start, end) (in wheel coords, top=0)
-        // contains (360 - finalRotation) mod 360.
-        const pointerAngle = (360 - finalRotation) % 360
-        const hit = slices.find(
-          (s) => pointerAngle >= s.start && pointerAngle < s.end,
-        ) ?? slices[slices.length - 1]
-        setWinner(hit.task)
-        setSpinning(false)
-        celebrate()
-      },
-    })
+    try {
+      await animate(rotation, target, {
+        duration: 4.5,
+        ease: [0.17, 0.67, 0.12, 0.99],
+      })
+    } finally {
+      // Always re-enable the button, even if the animation was interrupted.
+      setSpinning(false)
+    }
+
+    const finalRotation = ((target % 360) + 360) % 360
+    // Pointer is at top. Slices are stored in wheel coords (0 = top, growing clockwise).
+    // After clockwise rotation by `finalRotation`, the slice under the top pointer
+    // is the one containing (360 - finalRotation) mod 360 in wheel coords.
+    const pointerAngle = (360 - finalRotation) % 360
+    const hit = slices.find(
+      (s) => pointerAngle >= s.start && pointerAngle < s.end,
+    ) ?? slices[slices.length - 1]
+    setWinner(hit.task)
+    celebrate()
   }
 
   return (
