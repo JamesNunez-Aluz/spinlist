@@ -93,16 +93,17 @@ export default function SpinWheel({ tasks }: { tasks: Task[] }) {
     const turns = 5 + Math.random() * 3
     const offset = Math.random() * 360
     const target = rotation.get() + turns * 360 + offset
+    const durationMs = 4500
 
-    try {
-      await animate(rotation, target, {
-        duration: 4.5,
-        ease: [0.17, 0.67, 0.12, 0.99],
-      })
-    } finally {
-      // Always re-enable the button, even if the animation was interrupted.
-      setSpinning(false)
-    }
+    // Fire-and-forget the visual animation; framer-motion v12's promise on
+    // motion-value animations doesn't resolve reliably, so we use a timer
+    // as the source of truth for completion.
+    animate(rotation, target, {
+      duration: durationMs / 1000,
+      ease: [0.17, 0.67, 0.12, 0.99],
+    })
+
+    await new Promise<void>((resolve) => setTimeout(resolve, durationMs + 50))
 
     const finalRotation = ((target % 360) + 360) % 360
     // Pointer is at top. Slices are stored in wheel coords (0 = top, growing clockwise).
@@ -112,7 +113,9 @@ export default function SpinWheel({ tasks }: { tasks: Task[] }) {
     const hit = slices.find(
       (s) => pointerAngle >= s.start && pointerAngle < s.end,
     ) ?? slices[slices.length - 1]
+
     setWinner(hit.task)
+    setSpinning(false)
     celebrate()
   }
 
