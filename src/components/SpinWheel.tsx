@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, useMotionValue, animate, AnimatePresence } from 'framer-motion'
 import confetti from 'canvas-confetti'
 import type { Task } from '@/app/page'
@@ -19,11 +19,35 @@ type Slice = {
   color: string
 }
 
+const SPIN_DURATION_MS = 4500
+
 export default function SpinWheel({ tasks }: { tasks: Task[] }) {
   const rotation = useMotionValue(0)
   const [spinning, setSpinning] = useState(false)
   const [winner, setWinner] = useState<Task | null>(null)
   const wheelRef = useRef<HTMLDivElement>(null)
+  const spinIdRef = useRef(0)
+  const spinStartedAtRef = useRef(0)
+
+  // When the tab regains focus, if a spin should already have completed
+  // (browser likely paused timers/animations while backgrounded), invalidate
+  // the pending completion and re-enable the button.
+  useEffect(() => {
+    function check() {
+      if (document.visibilityState !== 'visible') return
+      if (!spinning) return
+      if (Date.now() - spinStartedAtRef.current >= SPIN_DURATION_MS) {
+        spinIdRef.current++ // any in-flight setTimeout below will see this and bail
+        setSpinning(false)
+      }
+    }
+    document.addEventListener('visibilitychange', check)
+    window.addEventListener('focus', check)
+    return () => {
+      document.removeEventListener('visibilitychange', check)
+      window.removeEventListener('focus', check)
+    }
+  }, [spinning])
 
   function celebrate() {
     const rect = wheelRef.current?.getBoundingClientRect()
@@ -87,28 +111,30 @@ export default function SpinWheel({ tasks }: { tasks: Task[] }) {
 
   async function spin() {
     if (slices.length === 0 || spinning) return
+
+    const myId = ++spinIdRef.current
+    spinStartedAtRef.current = Date.now()
     setSpinning(true)
     setWinner(null)
 
     const turns = 5 + Math.random() * 3
     const offset = Math.random() * 360
     const target = rotation.get() + turns * 360 + offset
-    const durationMs = 4500
 
     // Fire-and-forget the visual animation; framer-motion v12's promise on
-    // motion-value animations doesn't resolve reliably, so we use a timer
-    // as the source of truth for completion.
+    // motion-value animations doesn't resolve reliably, so we use a timer.
     animate(rotation, target, {
-      duration: durationMs / 1000,
+      duration: SPIN_DURATION_MS / 1000,
       ease: [0.17, 0.67, 0.12, 0.99],
     })
 
-    await new Promise<void>((resolve) => setTimeout(resolve, durationMs + 50))
+    await new Promise<void>((resolve) => setTimeout(resolve, SPIN_DURATION_MS + 50))
+
+    // If the user alt-tabbed and returned (visibility handler bumped the id),
+    // or started another spin, this completion is stale — bail.
+    if (myId !== spinIdRef.current) return
 
     const finalRotation = ((target % 360) + 360) % 360
-    // Pointer is at top. Slices are stored in wheel coords (0 = top, growing clockwise).
-    // After clockwise rotation by `finalRotation`, the slice under the top pointer
-    // is the one containing (360 - finalRotation) mod 360 in wheel coords.
     const pointerAngle = (360 - finalRotation) % 360
     const hit = slices.find(
       (s) => pointerAngle >= s.start && pointerAngle < s.end,
