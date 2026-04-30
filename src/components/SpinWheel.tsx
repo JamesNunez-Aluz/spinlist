@@ -29,24 +29,20 @@ export default function SpinWheel({ tasks }: { tasks: Task[] }) {
   const spinIdRef = useRef(0)
   const spinStartedAtRef = useRef(0)
 
-  // When the tab regains focus, if a spin should already have completed
-  // (browser likely paused timers/animations while backgrounded), invalidate
-  // the pending completion and re-enable the button.
+  // Watchdog: while spinning, poll wall-clock time. If we're past the spin
+  // duration (e.g., browser paused our completion timer because the window
+  // was hidden/occluded), force-reset so the button is never stuck.
+  // Doesn't rely on visibilitychange/focus events, which behave inconsistently
+  // across browsers when a window is covered by another window vs. minimized.
   useEffect(() => {
-    function check() {
-      if (document.visibilityState !== 'visible') return
-      if (!spinning) return
-      if (Date.now() - spinStartedAtRef.current >= SPIN_DURATION_MS) {
-        spinIdRef.current++ // any in-flight setTimeout below will see this and bail
+    if (!spinning) return
+    const watchdog = setInterval(() => {
+      if (Date.now() - spinStartedAtRef.current >= SPIN_DURATION_MS + 200) {
+        spinIdRef.current++ // invalidate any pending completion
         setSpinning(false)
       }
-    }
-    document.addEventListener('visibilitychange', check)
-    window.addEventListener('focus', check)
-    return () => {
-      document.removeEventListener('visibilitychange', check)
-      window.removeEventListener('focus', check)
-    }
+    }, 200)
+    return () => clearInterval(watchdog)
   }, [spinning])
 
   function celebrate() {
