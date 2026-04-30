@@ -1,36 +1,38 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SpinList
 
-## Getting Started
+Multi-user web to-do app where tasks render as slices of a spinning wheel. Slice arc size = `urgency × importance`. Spin → fair-random landing → that's your next task. Confetti on win.
 
-First, run the development server:
+## Stack
+
+- Next.js 16 (App Router) + React 19 + TypeScript + Tailwind 4
+- Supabase (auth + Postgres with row-level security)
+- Framer Motion for the spin animation, canvas-confetti for the celebration
+
+## Local development
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then open <http://localhost:3000>.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+You'll need a `.env.local` with two values from your Supabase project (Settings → API):
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR-anon-or-publishable-key
+```
 
-## Learn More
+The database schema is in `../Backend/schema.sql` — run it once in the Supabase SQL editor.
 
-To learn more about Next.js, take a look at the following resources:
+## Deploy (Vercel)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Push this repo to GitHub
+2. Import on [vercel.com](https://vercel.com) → it auto-detects Next.js
+3. Add the same two env vars in Vercel project settings
+4. In your Supabase project → Authentication → URL Configuration, add the deployed URL to **Site URL** and **Redirect URLs**
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Architecture notes
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See `../CLAUDE.md` at the repo root for full architecture (auth flow, Supabase client roles, wheel landing math, layout viewport coupling).
